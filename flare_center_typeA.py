@@ -20,10 +20,15 @@ import cv2
 import numpy as np
 import os
 
-folder = r'D:\Data\ET_camera\FlareTest\data_260624'
-fname0 = r'trans_white_DM250_CLR76_exp3_5ms_gain0dB.bmp'
-fname1 = r'trans_black_DM250_CLR76_exp28ms_gain0dB.bmp'
-fname2 = r'trans_white_DM250_CLR76_exp28ms_gain0dB.bmp'
+# folder = r'D:\Data\ET_camera\FlareTest\data_260624'
+# fname0 = r'trans_white_DM250_CLR76_exp3_5ms_gain0dB.bmp'
+# fname1 = r'trans_black_DM250_CLR76_exp28ms_gain0dB.bmp'
+# fname2 = r'trans_white_DM250_CLR76_exp28ms_gain0dB.bmp'
+
+folder = r'D:\Data\ET_camera\NIL\data_260717_flare'
+fname0 = r'step1_exp04ms_gainx1_led920_850nm.bmp'
+fname1 = r'step2_exp3_2ms_gainx1_led920_850nm.bmp'
+fname2 = r'step3_exp1_6ms_gainx1_led920_850nm.bmp'
 
 
 REGION_COLORS = {
@@ -65,8 +70,8 @@ def make_mask_from_contour(image_shape: tuple[int, int], contour: np.ndarray) ->
 def find_dark_rectangle(
     image: np.ndarray,
     *,
-    search_fraction: float = 0.70,
-    min_area_fraction: float = 0.002,
+    search_fraction: float = 0.35,
+    min_area_fraction: float = 0.001,
     max_area_fraction: float = 0.05,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -185,7 +190,7 @@ def find_dark_rectangle_from_bright_border(
         if area < 50:
             continue
         x, y, w, h = cv2.boundingRect(contour)
-        if w < 8 or h < 8:
+        if min(w, h) < 4 or max(w, h) < 12:
             continue
         cx = x + w / 2.0
         cy = y + h / 2.0
@@ -371,12 +376,25 @@ def draw_marked_image(
 ) -> np.ndarray:
     marked = image.copy()
     int_corners = np.round(corners).astype(int)
+    image_height, image_width = marked.shape[:2]
+    min_image_size = min(image_width, image_height)
+    is_small_image = min_image_size < 700
+    line_thickness = 1 if is_small_image else 3
+    point_radius = 4 if is_small_image else 8
+    font_scale = 0.32 if is_small_image else 0.55
+    text_thickness = 1 if is_small_image else 2
 
     if isinstance(contour, list):
-        cv2.drawContours(marked, contour, -1, (255, 0, 0), 2)
+        cv2.drawContours(marked, contour, -1, (255, 0, 0), line_thickness)
     elif contour is not None:
-        cv2.drawContours(marked, [contour], -1, (255, 0, 0), 2)
-    cv2.polylines(marked, [int_corners], isClosed=True, color=(0, 255, 0), thickness=3)
+        cv2.drawContours(marked, [contour], -1, (255, 0, 0), line_thickness)
+    cv2.polylines(
+        marked,
+        [int_corners],
+        isClosed=True,
+        color=(0, 255, 0),
+        thickness=line_thickness,
+    )
 
     if measurements is not None:
         overlay = marked.copy()
@@ -389,30 +407,41 @@ def draw_marked_image(
         for region in measurements["regions"]:
             color = REGION_COLORS[region["name"]]
             polygon = np.round(region["polygon"]).astype(np.int32)
-            cv2.polylines(marked, [polygon], isClosed=True, color=color, thickness=3)
+            cv2.polylines(
+                marked,
+                [polygon],
+                isClosed=True,
+                color=color,
+                thickness=line_thickness,
+            )
             label_xy = np.round(region["polygon"].mean(axis=0)).astype(int)
+            region_label = region["name"]
+            if is_small_image:
+                region_label = region_label.replace("dark_inner", "dark")
+                region_label = region_label.replace("bright_", "")
             cv2.putText(
                 marked,
-                f"{region['name']} {region['mean']:.1f}",
-                (int(label_xy[0]) - 70, int(label_xy[1])),
+                f"{region_label} {region['mean']:.1f}",
+                (int(label_xy[0]) - (26 if is_small_image else 70), int(label_xy[1])),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.55,
+                font_scale,
                 color,
-                2,
+                text_thickness,
                 cv2.LINE_AA,
             )
 
     labels = ["TL", "TR", "BR", "BL"]
     for label, (x, y) in zip(labels, int_corners):
-        cv2.circle(marked, (int(x), int(y)), 8, (0, 0, 255), -1)
+        cv2.circle(marked, (int(x), int(y)), point_radius, (0, 0, 255), -1)
+        corner_text = label if is_small_image else f"{label} ({int(x)}, {int(y)})"
         cv2.putText(
             marked,
-            f"{label} ({int(x)}, {int(y)})",
-            (int(x) + 10, int(y) - 10),
+            corner_text,
+            (int(x) + point_radius + 2, int(y) - point_radius - 2),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
+            0.34 if is_small_image else 0.6,
             (0, 0, 255),
-            2,
+            text_thickness,
             cv2.LINE_AA,
         )
 
