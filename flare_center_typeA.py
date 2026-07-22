@@ -577,7 +577,7 @@ def main() -> None:
 
     yw1 = measurements["bright_mean"]
     yb2 = black_measurements["YB2"]
-    yb3 = white_long_measurements["YB3"]
+    yb3 = white_long_measurements["YB3"] * 2
     flare = (yb3 - yb2) / yw1 * 100.0
 
     print()
